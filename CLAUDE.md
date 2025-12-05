@@ -2,106 +2,47 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Version**: 2.3.0 | **Updated**: 2025-12-04 | **Context**: Windows 10/11, PowerShell, Root: `D:\AI\claude01`
+**Version**: 3.1.0 | **Updated**: 2025-12-05 | **Context**: Windows 10/11, PowerShell, Root: `D:\AI\claude01`
 
 ## 1. Critical Rules
 
 1. **Language**: 한글 출력. 기술 용어(code, GitHub)는 영어.
 2. **Path**: 절대 경로만 사용. `D:\AI\claude01\...`
 3. **Validation**: Phase 검증 필수. 실패 시 STOP.
+4. **TDD**: Red → Green → Refactor. 테스트 없이 구현 완료 불가.
+5. **Git**: 코드 수정은 브랜치 → PR 필수. main 직접 커밋 금지.
 
 ---
 
-## 2. Auto Workflow
+## 2. Workflow
 
-Claude는 사용자 요청을 **맥락적으로 분석**하여 아래 워크플로우를 **자동 실행**합니다.
+### 요청 분류
 
-### 요청 분류 및 자동 실행
+| 요청 유형 | 자동 실행 |
+|-----------|-----------|
+| 신규 기능 / 리팩토링 | PRE_WORK → IMPL → FINAL_CHECK |
+| 버그 수정 | PRE_WORK(light) → IMPL → FINAL_CHECK |
+| 문서 수정 | 이슈 → 직접 커밋 |
+| 단순 질문 | 직접 응답 |
 
-| 요청 유형 | 트리거 (맥락 분석) | 자동 실행 |
-|-----------|-------------------|-----------|
-| **신규 기능** | "추가", "구현", "개발", "만들어", "feature" | PRE → IMPL → FINAL |
-| **버그 수정** | "수정", "고쳐", "fix", "버그", "안됨" | PRE(light) → IMPL → FINAL |
-| **리팩토링** | "리팩토링", "개선", "최적화", "refactor" | PRE → IMPL → FINAL |
-| **문서 수정** | "문서", "README", "docs", "주석" | ISSUE → COMMIT |
-| **단순 질문** | "뭐야", "어디", "왜", "설명", "?" | 직접 응답 |
+### PRE_WORK
+1. 오픈소스 검색 (MIT/Apache/BSD, Stars>500)
+2. 중복 확인 (`gh issue/pr list`)
+3. Make vs Buy 분석 → 사용자 승인
 
-### 분류 예외 처리
-다음 경우 **단순 질문**으로 처리 (자동 워크플로우 미적용):
-- "설명해줘", "알려줘" 동반 시
-- 코드 블록 없이 질문형 문장
-- 특정 파일/기능 미언급 + 일반 질문
+### IMPL
+1. GitHub 이슈/브랜치 생성: `<type>/issue-<num>-<desc>`
+2. TDD 구현
+3. 커밋: `fix(scope): Resolve #123 🐛` / `feat(scope): Add feature ✨`
 
-### PRE_WORK (사전 조사) - 자동
+### FINAL_CHECK
+E2E 테스트 → Phase 3~5 자동 진행 → Phase 6(배포)은 사용자 확인
 
-신규 기능/버그 수정/리팩토링 감지 시:
-
-1. **솔루션 검색**: WebSearch + `gh search repos` (오픈소스 우선)
-2. **중복 확인**: `gh issue list` + `gh pr list`
-3. **Make vs Buy 분석**: 직접 개발 vs 라이브러리 비교표
-4. **사용자 확인**: 분석 결과 제시 후 승인 대기
-
-> Light 모드 (버그 수정): 중복 확인만, 분석표 생략
-
-#### 오픈소스 우선순위
-1. **MIT/Apache/BSD 라이선스** 우선 검색
-2. Stars > 500, 최근 커밋 < 6개월
-3. 직접 개발은 마지막 수단
-
-#### 병렬 검색 에스컬레이션
-검색 결과 **불충분** 시 `/parallel-research` 자동 제안:
-- 결과 < 3개, 품질 미달, 상충 정보, 복합 기술, 비교 요청 ("vs")
-
-> 상세 기준: `/pre-work` 커맨드 참조
-
-### IMPLEMENTATION (구현) - 자동
-
-PRE_WORK 승인 후:
-
-1. **GitHub 연동**
-   - 코드 수정: `gh issue create/comment` → 브랜치 생성 → PR 필수
-   - 문서 수정: 이슈 업데이트 → 직접 커밋 허용
-2. **TDD 순서**: Red → Green → Refactor
-3. **브랜치**: `<type>/issue-<num>-<desc>`
-4. **커밋 타이밍**
-   - 테스트 통과 후 즉시 커밋
-   - 이슈 해결: `fix(scope): Resolve #123 🐛`
-   - 기능 완료: `feat(scope): Add feature ✨`
-   - `/commit` 커맨드 또는 수동 커밋
-   - README.md 수정 시: `version`, `updated` 배지 갱신
-5. **병렬 에이전트 (조건부 자동)**
-
-   | 복잡도 | 기준 | 동작 |
-   |--------|------|------|
-   | 단순 | 파일 ≤2, 변경 <50줄 | 단일 에이전트 |
-   | 중간 | 파일 3-5, 변경 50-200줄 | `/parallel-test` 제안 |
-   | 복잡 | 파일 ≥6, 아키텍처 변경 | `/parallel-dev` 제안 |
-
-   > 복잡도는 PRE_WORK 분석 시 자동 판단. validator는 `haiku` 모델 사용 (비용 최적화)
-
-### FINAL_CHECK (최종 검증) - 자동
-
-구현 완료 후 **자동 실행 및 자동 진행**:
-
-1. **E2E 테스트**: Playwright/Cypress 또는 `webapp-testing` 스킬
-2. **100% 통과 필수**: 실패 시 자동 수정 (최대 3회)
-3. **자동 Phase 진행**: 통과 시 Phase 3→4→5 자동 진행
-4. **최종 보고서**: 모든 Phase 완료 후 보고
-
-```
-✅ E2E 통과 → Phase 3 (버전) → Phase 4 (PR) → Phase 5 (Security)
-           → Phase 6 (배포) - 사용자 확인 대기
-```
-
-**대기 조건 (다음 경우에만 멈춤)**:
-| 조건 | 동작 |
-|------|------|
-| 사용자 검증 필수 | 배포, 프로덕션 변경 시 확인 요청 |
-| 해결 불가능 판단 | 3회 실패, 환경 문제 시 수동 개입 요청 |
+> 상세: `docs/WORKFLOW_REFERENCE.md`
 
 ---
 
-## 3. Phase Pipeline (요약)
+## 3. Phase Pipeline
 
 | Phase | 핵심 | Validator |
 |-------|------|-----------|
@@ -109,194 +50,204 @@ PRE_WORK 승인 후:
 | 0.5 | Task 분해 | `validate-phase-0.5.ps1` |
 | 1 | 구현 + 테스트 | `validate-phase-1.ps1` |
 | 2 | 테스트 통과 | `validate-phase-2.ps1` |
-| 2.5 | 코드 리뷰 + Security | `/parallel-review` + Security Audit |
-| 3 | 버전 자동 결정 | Conventional Commits 분석 |
+| 2.5 | 코드 리뷰 | `/parallel-review` |
+| 3 | 버전 결정 | Conventional Commits |
 | 4 | PR 생성 | `validate-phase-4.ps1` |
 | 5 | E2E + Security | `validate-phase-5.ps1` |
-| 6 | 배포 | `validate-phase-6.ps1` (사용자 확인 필수) |
+| 6 | 배포 | 사용자 확인 필수 |
 
-### 버전 자동 결정 (Phase 3)
+**자동 진행 중지**: MAJOR 버전, Critical 보안 취약점, 배포, 3회 실패
 
-| 커밋 타입 | 버전 변경 | 대기 여부 |
-|----------|----------|----------|
-| `fix:` | PATCH (0.0.X) | 자동 진행 |
-| `feat:` | MINOR (0.X.0) | 자동 진행 |
-| `BREAKING CHANGE:` | MAJOR (X.0.0) | ⏸️ 사용자 확인 |
+### 실패 시 디버깅 전략
 
-### 조건부 대기 (자동 진행 중지)
-
-| 조건 | 동작 |
-|------|------|
-| MAJOR 버전 변경 (Breaking) | ⏸️ 사용자 확인 대기 |
-| Critical/High 보안 취약점 | ⏸️ 사용자 확인 대기 |
-| 배포 (Phase 5) | ⏸️ 사용자 확인 대기 |
-| 3회 실패 | 수동 개입 요청 |
-
-### 워크플로우 선택 기준
-
-| 상황 | 워크플로우 | 설명 |
-|------|-----------|------|
-| 단순 작업 | **Auto Workflow** | 버그 수정, 소규모 기능 (PRE→IMPL→FINAL) |
-| 복잡한 프로젝트 | **Phase Pipeline** | PRD 필요, 다수 파일 변경 (Phase 0→5) |
-| 자율 운영 | **Autopilot** | `/autopilot` - 이슈 자동 처리 |
-| 명시적 요청 | **Phase Pipeline** | "PRD 만들어줘", "Phase 0 시작" |
-
-> 상세: `docs/WORKFLOW_REFERENCE.md`
-
-### Autopilot 모드 (`/autopilot`)
-
-이슈 분석 및 **토큰 한도까지 연속 실행**:
+해결 실패 시 **반드시** `docs/DEBUGGING_STRATEGY.md` 참조:
 
 ```
-/autopilot
+실패 → Phase 0: 디버그 로그 추가 → 로그 분석 → 예측 검증
+         ↓
+       Phase 1: 신규 기능 vs 기존 로직 판단
+         ↓
+       ┌─────────────┬─────────────┐
+       │ 신규 기능   │ 기존 로직   │
+       │ → PRD 검토  │ → 예측 검증 │
+       │ → 리팩토링? │ → 가설 실험 │
+       └─────────────┴─────────────┘
+         ↓
+       3회 실패 → /issue-failed → 수동 개입
+```
+
+**핵심 원칙**:
+1. **로그 없이 수정 금지**: 추측 기반 수정은 새 버그 유발
+2. **문제 파악 > 해결**: 문제를 정확히 알면 해결은 쉬움
+3. **예측 검증 필수**: "내 예측이 로그로 확인되었는가?"
+
+---
+
+## 4. Agents (내장 Subagent 중심)
+
+Claude Code **내장 subagent 37개**를 활용. Task tool의 `subagent_type`으로 호출.
+
+### Phase별 필수 에이전트
+
+| Phase | 필수 | 선택 |
+|-------|------|------|
+| 0 (PRD) | `Plan`, `context7-engineer` | `seq-engineer`, `Explore` |
+| 0.5 (Task) | `task-decomposition-expert` | `taskmanager-planner` |
+| 1 (구현) | `debugger`(버그), `context7-engineer` | `backend-architect`, `frontend-developer`, `fullstack-developer` |
+| 2 (테스트) | `test-automator` | `playwright-engineer` |
+| 2.5 (리뷰) | `code-reviewer` | `security-auditor`, `architect-reviewer` |
+| 5 (E2E) | `playwright-engineer`, `security-auditor` | `performance-engineer` |
+| 6 (배포) | `deployment-engineer` | `cloud-architect` |
+
+### 유틸리티 에이전트
+
+| 에이전트 | 용도 | 사용 시점 |
+|----------|------|-----------|
+| `Explore` | 코드베이스 빠른 탐색 | 파일/키워드 검색 |
+| `Plan` | 구현 계획 설계 | 복잡한 기능 시작 전 |
+| `general-purpose` | 범용 멀티스텝 태스크 | 복합 조사 |
+| `claude-code-guide` | Claude Code 문서 조회 | 사용법 질문 |
+
+### 전문 분야 에이전트
+
+| 분야 | 에이전트 |
+|------|----------|
+| **개발** | `backend-architect`, `frontend-developer`, `fullstack-developer`, `mobile-developer`, `typescript-expert`, `graphql-architect` |
+| **데이터** | `database-architect`, `database-optimizer`, `data-engineer`, `data-scientist` |
+| **AI/ML** | `ai-engineer`, `ml-engineer`, `prompt-engineer` |
+| **인프라** | `cloud-architect`, `deployment-engineer`, `devops-troubleshooter`, `supabase-engineer` |
+| **품질** | `code-reviewer`, `security-auditor`, `performance-engineer`, `test-automator`, `playwright-engineer` |
+| **분석** | `seq-engineer`, `context7-engineer`, `exa-search-specialist`, `debugger` |
+
+### Agent-Workflow 연결
+
+```
+사용자 요청
     ↓
-/init → /issues ─┬─ 이슈 있음 → 작업 실행 ─┐
-                 │                         │
-                 └─ 이슈 없음 ──────────────┤
-                         ↓                 │
-               /parallel-research          │
-                         ↓                 │
-               개선안 → 이슈 등록 ──────────┘
-                         ↓
-               반복 (토큰 한도까지)
-                         ↓
-               토큰 한도 → 세션 종료
-                         ↓
-               사용자가 /autopilot 입력 → 재개
+┌─────────────────────────────────────────────────────┐
+│ Workflow (PRE_WORK → IMPL → FINAL_CHECK)            │
+│     │           │            │                      │
+│     ↓           ↓            ↓                      │
+│ ┌───────┐  ┌────────┐  ┌───────────┐               │
+│ │Explore│  │개발    │  │playwright │               │
+│ │context│  │에이전트│  │security   │               │
+│ └───────┘  └────────┘  └───────────┘               │
+└─────────────────────────────────────────────────────┘
 ```
 
-| 원칙 | 설명 |
-|------|------|
-| 무한 반복 | 이슈 처리 → 없으면 생성 → 처리 → 반복 |
-| 토큰 한도 의존 | 토큰 소진 시 자동 종료 |
-| **수동 재개** | 세션 초기화 후 사용자가 `/autopilot` 입력 필요 |
+| Workflow 단계 | 호출 Agent | 역할 |
+|---------------|------------|------|
+| PRE_WORK | `Explore`, `context7-engineer`, `exa-search-specialist` | 코드 탐색, 기술 검증, 오픈소스 검색 |
+| IMPL | `debugger`, `backend-architect`, `frontend-developer`, `test-automator` | 원인 분석, 구현, 테스트 |
+| FINAL_CHECK | `playwright-engineer`, `security-auditor`, `code-reviewer` | E2E, 보안, 리뷰 |
 
-> 상세: `.claude/commands/autopilot.md`
+### 슬래시 커맨드 → Agent 매핑
+
+| 커맨드 | 호출 Agent (병렬) |
+|--------|-------------------|
+| `/parallel-dev` | `architect` + `coder` + `tester` + `docs` |
+| `/parallel-test` | `unit` + `integration` + `e2e` + `security` |
+| `/parallel-review` | `code-reviewer` + `security-auditor` + `architect-reviewer` |
+| `/fix-issue` | `debugger` → 개발 에이전트 (순차) |
+
+### 병렬 호출 예시
+
+```python
+# 단일 메시지에 여러 Task 호출 = 병렬 실행
+Task(subagent_type="frontend-developer", prompt="UI 구현", description="프론트")
+Task(subagent_type="backend-architect", prompt="API 구현", description="백엔드")
+Task(subagent_type="test-automator", prompt="테스트 작성", description="테스트")
+```
+
+> 상세: `docs/AGENTS_REFERENCE.md`
 
 ---
 
-## 4. Commands (카테고리)
-
-| 카테고리 | 주요 커맨드 |
-|----------|-------------|
-| **Autopilot** | `/autopilot` (자율 운영 모드) |
-| Planning | `/create-prd`, `/todo`, `/issues`, `/issue` |
-| Coding | `/tdd`, `/fix-issue`, `/parallel-dev` |
-| Testing | `/parallel-test`, `/parallel-review`, `/check`, `/api-test` |
-| Ops | `/commit`, `/changelog`, `/create-pr` |
-| Auto | `/pre-work`, `/final-check` |
-| Research | `/parallel-research`, `/issue-update` |
-| Analysis | `/optimize`, `/analyze-logs`, `/analyze-code` |
-
-> 전체 목록 (28개): `.claude/commands/`
-
----
-
-## 5. Architecture (요약)
+## 5. Architecture
 
 ```
 D:\AI\claude01\
-├── .claude/           # Commands, Agents, Skills, Hooks
-├── src/agents/        # Multi-Agent (LangGraph)
+├── .claude/
+│   ├── commands/      # 슬래시 커맨드 (28개)
+│   ├── skills/        # skill-creator, webapp-testing
+│   └── hooks/         # 프롬프트 검증
+├── src/agents/        # LangGraph 멀티에이전트
+│   ├── parallel_workflow.py  # Fan-Out/Fan-In (Supervisor → Subagents)
+│   ├── dev_workflow.py       # Architect/Coder/Tester/Docs
+│   ├── test_workflow.py      # Unit/Integration/E2E/Security
+│   └── config.py             # Model Tiering (sonnet/haiku)
 ├── scripts/           # Phase Validators (PowerShell)
 ├── tasks/prds/        # PRD 문서
-└── docs/              # 상세 가이드
+├── tests/             # pytest 테스트
+└── archive-analyzer/  # 서브프로젝트 (별도 CLAUDE.md)
 ```
-
-**Agents**: 33개 (`.claude/agents/`)
-**Skills**: `skill-creator`, `webapp-testing`
-
-> 상세: `docs/WORKFLOW_REFERENCE.md`, `docs/guides/MULTI_AGENT_GUIDE.md`
 
 ---
 
-## 6. Quick Reference
+## 6. Commands (핵심)
+
+| 커맨드 | 용도 |
+|--------|------|
+| `/autopilot` | 자율 운영 - 이슈 자동 처리 (토큰 한도까지) |
+| `/fix-issue` | GitHub 이슈 분석 및 수정 |
+| `/commit` | Conventional Commit 생성 |
+| `/create-pr` | PR 생성 |
+| `/parallel-dev` | 병렬 개발 에이전트 |
+| `/tdd` | TDD 가이드 |
+| `/check` | 코드 품질 검사 |
+| `/issue-failed` | 실패 분석 + 새 솔루션 제안 |
+
+> 전체 목록: `.claude/commands/`
+
+---
+
+## 7. Build & Test
 
 ```powershell
-# 환경 설정
-$env:ANTHROPIC_API_KEY = "your-key"
+# 테스트
+pytest tests/ -v
+pytest tests/ -v -m unit                    # 단위 테스트
+pytest tests/test_parallel_workflow.py -v   # 단일 파일
+pytest tests/test_file.py::test_func -v     # 단일 함수
+pytest tests/ -v --cov=src --cov-report=term  # 커버리지
 
-# 테스트 (마커별)
-pytest tests/ -v -m unit           # 단위 테스트만
-pytest tests/ -v -m integration    # 통합 테스트만
-pytest tests/ -v -m "not slow"     # 느린 테스트 제외
-
-# 단일 테스트
-pytest tests/test_parallel_workflow.py -v
-pytest tests/test_parallel_workflow.py::test_function_name -v
-
-# 커버리지
-pytest tests/ -v --cov=src --cov-report=term
+# 에이전트 실행
+python src/agents/parallel_workflow.py "프로젝트 분석"
+python src/agents/dev_workflow.py "새 기능 구현"
 
 # Phase 상태
 .\scripts\phase-status.ps1
-
-# Bypass 모드
-.\start-claude.bat
 ```
 
-### Lint & Format (archive-analyzer)
+### archive-analyzer (서브프로젝트)
 
 ```powershell
-ruff check D:\AI\claude01\archive-analyzer\src
-black --check D:\AI\claude01\archive-analyzer\src
-mypy D:\AI\claude01\archive-analyzer\src\archive_analyzer
-```
-
-### 서브프로젝트
-
-> **archive-analyzer**: 미디어 아카이브 분석 도구. 상세 내용은 `D:\AI\claude01\archive-analyzer\CLAUDE.md` 참조.
-
-```powershell
-# 빠른 시작
 cd D:\AI\claude01\archive-analyzer
 pip install -e ".[dev,media,search]"
+pytest tests/ -v
+ruff check src/ && black --check src/ && mypy src/archive_analyzer/
 uvicorn src.archive_analyzer.api:app --reload --port 8000
 ```
 
-### 환경 변수 (필수)
-
-| 변수 | 용도 | 예시 |
-|------|------|------|
-| `ANTHROPIC_API_KEY` | Claude API | `sk-ant-...` |
-| `GITHUB_TOKEN` | GitHub CLI | `ghp_...` |
-| `SMB_SERVER` | NAS 접속 | `10.10.100.122` |
-| `SMB_USERNAME` / `SMB_PASSWORD` | NAS 인증 | - |
-| `MEILISEARCH_URL` | 검색 서버 | `http://localhost:7700` |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth (선택) | - |
-
-> 상세: `archive-analyzer/.env.example`, `.env.example`
-
-**Hooks**: 프롬프트 제출 시 규칙 위반 자동 검사 (`.claude/hooks/`)
+> 상세: `D:\AI\claude01\archive-analyzer\CLAUDE.md`
 
 ---
 
-## 7. Workflow Override
+## 8. Environment
 
-자동 워크플로우를 건너뛰려면 명시적으로 요청:
-
-| Override 대상 | 트리거 표현 | 경고 |
-|---------------|-------------|------|
-| PRE_WORK 전체 | "바로", "그냥", "빨리", "분석 없이", "검색 없이" | - |
-| 솔루션 검색만 | "검색 생략", "라이브러리 검색 없이" | - |
-| FINAL_CHECK | "테스트 스킵", "E2E 없이", "검증 생략" | ⚠️ |
-
-### E2E 테스트 불가 시
-테스트 환경 없음 감지 시:
-1. `webapp-testing` 스킬로 기본 스모크 테스트
-2. 불가 시 "⚠️ E2E 미실행" 경고와 함께 보고
-3. 수동 테스트 계획 포함 필수
-
----
-
-## 8. Do Not (금지 사항)
-
-| 금지 | 이유 |
+| 변수 | 용도 |
 |------|------|
-| ❌ Phase validator 없이 다음 Phase 진행 | 품질 보장 실패 |
-| ❌ 상대 경로 사용 (`./`, `../`) | `D:\AI\claude01\...` 절대 경로 필수 |
-| ❌ E2E 테스트 없이 최종 보고 | 불가 시 "⚠️ E2E 미실행" 경고 필수 |
-| ❌ 영어로 일반 응답 | 기술 용어(code, GitHub)만 영어 |
-| ❌ PR 없이 main 직접 커밋 | 코드 수정은 브랜치 → PR 필수 |
-| ❌ 테스트 없이 구현 완료 처리 | TDD: Red → Green → Refactor |
-| ❌ pokervod.db 스키마 무단 변경 | `qwen_hand_analysis` 소유, 협의 필수 |
+| `ANTHROPIC_API_KEY` | Claude API |
+| `GITHUB_TOKEN` | GitHub CLI |
+| `SMB_SERVER` / `SMB_USERNAME` / `SMB_PASSWORD` | NAS 접속 |
+| `MEILISEARCH_URL` | 검색 서버 |
+
+---
+
+## 9. Do Not
+
+- ❌ Phase validator 없이 다음 Phase 진행
+- ❌ 상대 경로 사용 (`./`, `../`)
+- ❌ PR 없이 main 직접 커밋
+- ❌ 테스트 없이 구현 완료
+- ❌ `pokervod.db` 스키마 무단 변경 (`qwen_hand_analysis` 소유)
