@@ -1,6 +1,6 @@
 # PRD-0024: 에이전트 인과관계 분석 및 정리
 
-**Version**: 1.0.0 | **Created**: 2025-12-05 | **Status**: Draft
+**Version**: 1.1.0 | **Created**: 2025-12-05 | **Status**: In Review
 **Issue**: [#24](https://github.com/garimto81/archive-analyzer/issues/24)
 
 ---
@@ -102,9 +102,66 @@ design-review, pragmatic-code-review
 
 ---
 
-## 3. 제안 방안
+## 3. 솔루션 비교 분석
 
-### 3.1 CLAUDE.md 섹션 4 수정
+### 3.1 검색 결과 요약
+
+병렬 검색으로 분석한 에이전트 관리 솔루션:
+
+| 솔루션 | 장점 | 단점 | 작업량 |
+|--------|------|------|--------|
+| **A. YAML Registry + LangGraph** ⭐ | 기존 코드 재활용, 점진적 마이그레이션 | 레지스트리 구현 필요 | 중 |
+| **B. CrewAI 마이그레이션** | Role-based 직관성, 빠른 프로토타이핑 | 전면 재작성 필요 | 대 |
+| **C. 단순화 (내장만)** | 유지보수 쉬움, 복잡도 감소 | 전문성 손실 | 소 |
+
+### 3.2 권장 솔루션: YAML Agent Registry
+
+**핵심 발견**: Claude Code의 `subagent_type` 파라미터는 **공식 미정의**. 로컬 에이전트는 자동 위임 또는 명시적 요청으로만 호출 가능.
+
+```yaml
+# .claude/agents.yaml (신규 레지스트리)
+agents:
+  # Tier 1: 내장 subagent (직접 호출 가능)
+  debugger:
+    type: builtin
+    subagent_type: debugger
+
+  # Tier 2: 로컬 에이전트 (LangGraph 실행)
+  backend-architect:
+    type: local
+    prompt_file: .claude/plugins/backend-development/agents/backend-architect.md
+    model: sonnet
+    tools: [Read, Write, Edit, Bash]
+
+  # Tier 3: MCP 연동
+  exa-search:
+    type: mcp
+    server: exa
+    tool: search
+```
+
+**계층 구조**:
+```
+Master Supervisor (general-purpose)
+├── Phase 0 Team (Plan + Explore)
+│   └── context7-engineer, exa-search (MCP)
+├── Phase 1 Team (general-purpose)
+│   └── backend-architect, frontend-developer (Local)
+├── Phase 2 Team (debugger)
+│   └── test-automator, playwright-engineer (Local)
+└── Phase 5 Team (general-purpose)
+    └── security-auditor, deployment-engineer (Local)
+```
+
+**참고 자료**:
+- [langgraph-bigtool](https://github.com/langchain-ai/langgraph-bigtool) - 대규모 도구 관리
+- [LangGraph Multi-Agent Workflows](https://blog.langchain.com/langgraph-multi-agent-workflows/)
+
+---
+
+## 4. 세부 구현 방안
+
+### 4.1 CLAUDE.md 섹션 4 수정
 
 **기존**:
 ```markdown
@@ -194,35 +251,36 @@ mv .claude/plugins/meta-development/agents/agent-expert.md .claude/plugins.archi
 
 ---
 
-## 4. 작업 항목
+## 5. 작업 항목
 
-### 4.1 Phase 1: 문서 수정
+### 5.1 Phase 1: YAML Registry 구축
+
+- [ ] `.claude/agents.yaml` 레지스트리 파일 생성
+- [ ] 내장 4개 + 로컬 12개 + MCP 3개 정의
+- [ ] `src/agents/registry.py` 로더 구현
+
+### 5.2 Phase 2: 문서 수정
 
 - [ ] CLAUDE.md 섹션 4 재구성 (내장/로컬/MCP 분리)
 - [ ] "내장 subagent 37개" → "내장 4개 + 로컬 12개 + MCP 3개" 수정
 - [ ] `docs/AGENTS_REFERENCE.md` 활성/대기/미사용 분류 추가
 
-### 4.2 Phase 2: 중복 제거
+### 5.3 Phase 3: 중복 제거 및 아카이브
 
 - [ ] 중복 에이전트 5개 대표 위치 결정
-- [ ] 중복 파일 삭제 또는 심볼릭 링크 변환
-- [ ] 플러그인 구조 정리
-
-### 4.3 Phase 3: 미사용 아카이브
-
 - [ ] `.claude/plugins.archive/` 디렉토리 생성
 - [ ] 미사용 에이전트 23개 이동
-- [ ] `.gitignore`에 아카이브 추가 (선택)
 
-### 4.4 Phase 4: 검증
+### 5.4 Phase 4: 검증
 
+- [ ] YAML Registry 로딩 테스트
 - [ ] 슬래시 커맨드 동작 테스트
 - [ ] CLAUDE.md 정확성 검증
 - [ ] PR 생성 및 리뷰
 
 ---
 
-## 5. 성공 기준
+## 6. 성공 기준
 
 | 기준 | 현재 | 목표 |
 |------|------|------|
@@ -233,7 +291,7 @@ mv .claude/plugins/meta-development/agents/agent-expert.md .claude/plugins.archi
 
 ---
 
-## 6. 위험 및 완화
+## 7. 위험 및 완화
 
 | 위험 | 영향 | 완화 방안 |
 |------|------|----------|
@@ -243,8 +301,11 @@ mv .claude/plugins/meta-development/agents/agent-expert.md .claude/plugins.archi
 
 ---
 
-## 7. 참고 자료
+## 8. 참고 자료
 
 - [Claude Code Subagents Documentation](https://code.claude.com/docs/en/sub-agents.md)
+- [LangGraph Multi-Agent Workflows](https://blog.langchain.com/langgraph-multi-agent-workflows/)
+- [langgraph-bigtool](https://github.com/langchain-ai/langgraph-bigtool) - 대규모 도구 관리
+- [CrewAI Documentation](https://docs.crewai.com/)
 - [CLAUDE.md v3.5.0](D:\AI\claude01\CLAUDE.md)
 - [docs/AGENTS_REFERENCE.md](D:\AI\claude01\docs\AGENTS_REFERENCE.md)
