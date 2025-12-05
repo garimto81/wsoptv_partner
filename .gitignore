@@ -59,6 +59,10 @@ scripts.backup/
 *.md.backup
 nul
 
+# MCP 설정 (API 키 포함)
+.mcp.json
+!.mcp.json.example
+
 # Claude 설정 - 핵심 디렉토리는 추적
 .claude/evolution/.env
 .claude/evolution/data/

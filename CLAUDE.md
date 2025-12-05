@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Version**: 3.4.0 | **Updated**: 2025-12-05 | **Context**: Windows 10/11, PowerShell, Root: `D:\AI\claude01`
+**Version**: 3.5.0 | **Updated**: 2025-12-05 | **Context**: Windows 10/11, PowerShell, Root: `D:\AI\claude01`
 
 ## 1. Critical Rules
 
@@ -39,22 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 E2E 테스트 → Phase 3~5 자동 진행 → Phase 6(배포)은 사용자 확인
 
-**E2E 테스트 워크플로우**:
-```
-1. playwright-engineer 호출 또는 webapp-testing 스킬 사용
-2. 테스트 실행: npx playwright test
-3. 실패 시: 스크린샷 분석 → 자동 수정 (최대 3회)
-4. 100% 통과 필수 → 실패 시 수동 개입
-```
-
-**E2E 테스트 실패 처리**:
-| 시도 | 동작 |
-|------|------|
-| 1회 실패 | 스크린샷/로그 분석 → 자동 수정 |
-| 2회 실패 | selector 재검증 → 수정 |
-| 3회 실패 | ⏸️ `/issue-failed` → 수동 개입 |
-
-> 상세: `docs/WORKFLOW_REFERENCE.md`
+> E2E 실행 방법 및 실패 처리: **섹션 7. Browser Testing & E2E** 참조
 
 ---
 
@@ -183,22 +168,69 @@ Task(subagent_type="test-automator", prompt="테스트 작성", description="테
 
 ## 5. Architecture
 
+### 디렉토리 구조
+
 ```
 D:\AI\claude01\
 ├── .claude/
 │   ├── commands/      # 슬래시 커맨드 (28개)
+│   ├── plugins/       # 로컬 에이전트 정의 (80개)
 │   ├── skills/        # webapp-testing (E2E), skill-creator
 │   └── hooks/         # 프롬프트 검증
 ├── src/agents/        # LangGraph 멀티에이전트
-│   ├── parallel_workflow.py  # Fan-Out/Fan-In (Supervisor → Subagents)
-│   ├── dev_workflow.py       # Architect/Coder/Tester/Docs
-│   ├── test_workflow.py      # Unit/Integration/E2E/Security
-│   └── config.py             # Model Tiering (sonnet/haiku)
 ├── scripts/           # Phase Validators (PowerShell)
 ├── tasks/prds/        # PRD 문서
 ├── tests/             # pytest 테스트
 └── archive-analyzer/  # 서브프로젝트 (별도 CLAUDE.md)
 ```
+
+### LangGraph Multi-Agent Pattern
+
+`src/agents/parallel_workflow.py` - Fan-Out/Fan-In 패턴:
+
+```
+                    ┌─────────────┐
+                    │  Supervisor │ (sonnet) - 태스크 분해
+                    │ supervisor_ │
+                    │    node     │
+                    └──────┬──────┘
+                           │
+            ┌──────────────┼──────────────┐  ← Fan-Out
+            ↓              ↓              ↓
+    ┌───────────┐  ┌───────────┐  ┌───────────┐
+    │  Agent 0  │  │  Agent 1  │  │  Agent 2  │  (병렬 실행)
+    │(researcher)│ │(researcher)│ │(researcher)│
+    └─────┬─────┘  └─────┬─────┘  └─────┬─────┘
+          │              │              │
+          └──────────────┼──────────────┘  ← Fan-In
+                         ↓
+                  ┌─────────────┐
+                  │ Aggregator  │ (sonnet) - 결과 종합
+                  │   _node     │
+                  └─────────────┘
+```
+
+**State Flow**:
+```python
+WorkflowState = {
+    task: str,                          # 원본 태스크
+    subtasks: list[str],                # supervisor가 분해
+    results: Annotated[list, add],      # Reducer로 병합
+    final_output: str                   # aggregator 출력
+}
+```
+
+**Model Tiering** (`src/agents/config.py`):
+
+| Role | Model | 용도 |
+|------|-------|------|
+| supervisor | sonnet | 복잡한 의사결정, 태스크 분해 |
+| researcher | sonnet | 일반 태스크 실행 |
+| validator | haiku | 간단한 검증 (비용 최적화) |
+
+**Specialized Workflows**:
+- `dev_workflow.py`: Architect/Coder/Tester/Docs 병렬
+- `test_workflow.py`: Unit/Integration/E2E/Security 병렬
 
 ---
 
@@ -219,7 +251,7 @@ D:\AI\claude01\
 
 ---
 
-## 7. Browser Testing (Phase-Independent)
+## 7. Browser Testing & E2E
 
 **모든 Phase에서** 브라우저 기반 테스트 가능. UI 검증이 필요할 때 즉시 사용.
 
@@ -230,7 +262,7 @@ D:\AI\claude01\
 | 1 (구현) | UI 컴포넌트 동작 확인, 레이아웃 검증 |
 | 2 (테스트) | 통합 테스트, 사용자 플로우 검증 |
 | 2.5 (리뷰) | UI/UX 리뷰, 접근성 확인 |
-| 5 (E2E) | 전체 시나리오 테스트, 회귀 테스트 |
+| 5 (E2E) | 전체 시나리오 테스트, 회귀 테스트 ← **FINAL_CHECK 자동 실행** |
 
 ### 실행 방법
 
@@ -264,6 +296,22 @@ with sync_playwright() as p:
     page.wait_for_load_state('networkidle')
     page.screenshot(path='D:/AI/claude01/logs/ui_check.png', full_page=True)
     browser.close()
+```
+
+### E2E 실패 처리 (FINAL_CHECK)
+
+| 시도 | 동작 |
+|------|------|
+| 1회 실패 | 스크린샷/로그 분석 → 자동 수정 |
+| 2회 실패 | selector 재검증 → 수정 |
+| 3회 실패 | ⏸️ `/issue-failed` → 수동 개입 |
+
+**워크플로우**:
+```
+1. playwright-engineer 호출 또는 webapp-testing 스킬 사용
+2. 테스트 실행: npx playwright test
+3. 실패 시: 스크린샷 분석 → 자동 수정 (최대 3회)
+4. 100% 통과 필수 → 실패 시 수동 개입
 ```
 
 > 상세: `.claude/skills/webapp-testing/SKILL.md`
@@ -357,6 +405,11 @@ mcp__mem0__search_memory(query="DB 스키마 결정사항")
 | `GITHUB_TOKEN` | GitHub CLI |
 | `SMB_SERVER` / `SMB_USERNAME` / `SMB_PASSWORD` | NAS 접속 |
 | `MEILISEARCH_URL` | 검색 서버 |
+| `EXA_API_KEY` | Exa MCP 검색 |
+| `MEM0_API_KEY` | Mem0 MCP 메모리 |
+| `REF_API_KEY` | Ref MCP 문서 검색 |
+
+> MCP 설정: `.mcp.json.example` 참조 → `.mcp.json`으로 복사 후 환경변수 설정
 
 ---
 

@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "docfork": {
+      "type": "sse",
+      "url": "https://mcp.docfork.com/sse"
+    },
+    "ref": {
+      "type": "sse",
+      "url": "https://api.ref.tools/mcp?apiKey=${REF_API_KEY}"
+    },
+    "exa": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "exa-mcp-server"],
+      "env": {
+        "EXA_API_KEY": "${EXA_API_KEY}"
+      }
+    },
+    "mem0": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "mcp-mem0"],
+      "env": {
+        "MEM0_API_KEY": "${MEM0_API_KEY}"
+      }
+    }
+  }
+}
