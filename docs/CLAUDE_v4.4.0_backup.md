@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Version**: 4.5.1 | **Updated**: 2025-12-07 | **Context**: Windows 10/11, PowerShell, Root: `D:\AI\claude01`
+**Version**: 4.4.0 | **Updated**: 2025-12-07 | **Context**: Windows 10/11, PowerShell, Root: `D:\AI\claude01`
 
 ## 1. Critical Rules
 
@@ -144,7 +144,7 @@ E2E 테스트 → Phase 3~5 자동 진행 → Phase 6(배포)은 사용자 확�
 
 ---
 
-## 6. Commands (17개)
+## 6. Commands (15개)
 
 ### 핵심 워크플로우
 
@@ -274,7 +274,7 @@ Task(subagent_type="backend-architect", prompt=f"API 구현, 스키마: {result}
 ```
 D:\AI\claude01\
 ├── .claude/
-│   ├── commands/      # 슬래시 커맨드 (17개)
+│   ├── commands/      # 슬래시 커맨드 (29개)
 │   ├── plugins/       # 로컬 에이전트 정의 (50개)
 │   ├── skills/        # 자동 트리거 워크플로우 (10개)
 │   └── hooks/         # 프롬프트 검증
@@ -354,64 +354,3 @@ D:\AI\claude01\
 - ❌ PR 없이 main 직접 커밋
 - ❌ 테스트 없이 구현 완료
 - ❌ `pokervod.db` 스키마 무단 변경 (`qwen_hand_analysis` 소유)
-
----
-
-## 13. Crash Prevention
-
-Claude Code 비정상 종료 방지 규칙. ([#27](https://github.com/garimto81/archive-analyzer/issues/27))
-
-### Bash 타임아웃 (120초 제한)
-
-```powershell
-# ❌ 금지 (2분 초과 시 EPERM 크래시)
-pytest tests/ -v --cov                    # 대규모 테스트
-npm install && npm run build && npm test  # 체인 명령어
-Start-Sleep -Seconds 120                  # 장시간 대기 (Windows)
-
-# ✅ 권장
-pytest tests/ -v -x --timeout=60          # 타임아웃 설정
-pytest tests/test_a.py -v                 # 개별 파일 분할
-# 또는 Bash tool에서 run_in_background: true 사용
-```
-
-### 프로세스 종료 규칙
-
-| 상황 | 권장 |
-|------|------|
-| 장시간 명령어 | `run_in_background: true` 사용 |
-| ESC 중단 | 가능하면 완료까지 대기 (EBADF 크래시 위험) |
-| `sudo -u [user]` | ESC 금지 (EPERM 크래시) |
-| 테스트 실행 | 개별 파일 단위로 분할 |
-
-### 안전한 패턴
-
-```powershell
-# 장시간 작업 분리
-pytest tests/test_a.py -v && pytest tests/test_b.py -v  # 개별 실행
-
-# 백그라운드 실행 후 결과 확인
-# Bash(run_in_background=true): npm run build
-# BashOutput(bash_id): 결과 확인
-```
-
----
-
-## 14. Prompt Learning (Advanced)
-
-CLAUDE.md 자동 최적화 시스템. `src/agents/prompt_learning/`
-
-| 모듈 | 용도 |
-|------|------|
-| `dspy_optimizer.py` | DSPy 기반 Phase 검증 최적화 |
-| `textgrad_optimizer.py` | TextGrad 기반 에이전트 프롬프트 최적화 |
-| `failure_analyzer.py` | 세션 실패 원인 분석 |
-| `claude_md_updater.py` | CLAUDE.md 자동 업데이트 |
-
-```powershell
-# 최적화 실행 (모듈 방식)
-python -m src.agents.prompt_learning.dspy_optimizer
-python -m src.agents.prompt_learning.ab_test
-```
-
-> 상세: `docs/guides/PROMPT_LEARNING_GUIDE.md`
