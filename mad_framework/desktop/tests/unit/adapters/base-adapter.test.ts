@@ -79,8 +79,8 @@ describe('BaseLLMAdapter', () => {
 
   describe('inputPrompt', () => {
     it('should input prompt text into textarea', async () => {
-      // Script returns true when successful
-      mockWebContents.executeJavaScript.mockResolvedValue(true);
+      // enterPrompt script returns {success: true} object
+      mockWebContents.executeJavaScript.mockResolvedValue({ success: true });
 
       const adapter = new BaseLLMAdapter('chatgpt', mockWebContents as any);
       const prompt = 'Test prompt for debate';
@@ -93,7 +93,7 @@ describe('BaseLLMAdapter', () => {
     });
 
     it('should escape special characters in prompt', async () => {
-      mockWebContents.executeJavaScript.mockResolvedValue(true);
+      mockWebContents.executeJavaScript.mockResolvedValue({ success: true });
 
       const adapter = new BaseLLMAdapter('chatgpt', mockWebContents as any);
       const prompt = 'Test with "quotes" and \'apostrophes\'';
@@ -104,7 +104,7 @@ describe('BaseLLMAdapter', () => {
     });
 
     it('should throw error when input fails', async () => {
-      mockWebContents.executeJavaScript.mockResolvedValue(false);
+      mockWebContents.executeJavaScript.mockResolvedValue({ success: false, error: 'selector not found' });
 
       const adapter = new BaseLLMAdapter('chatgpt', mockWebContents as any);
 
@@ -114,7 +114,8 @@ describe('BaseLLMAdapter', () => {
 
   describe('sendMessage', () => {
     it('should click send button', async () => {
-      mockWebContents.executeJavaScript.mockResolvedValue(true);
+      // submitMessage script returns {success: true} object
+      mockWebContents.executeJavaScript.mockResolvedValue({ success: true });
 
       const adapter = new BaseLLMAdapter('chatgpt', mockWebContents as any);
       await adapter.sendMessage();
@@ -123,7 +124,7 @@ describe('BaseLLMAdapter', () => {
     });
 
     it('should throw error when send button not found', async () => {
-      mockWebContents.executeJavaScript.mockResolvedValue(false);
+      mockWebContents.executeJavaScript.mockResolvedValue({ success: false, error: 'send button not found' });
 
       const adapter = new BaseLLMAdapter('chatgpt', mockWebContents as any);
       await expect(adapter.sendMessage()).rejects.toThrow('Failed to send message');

@@ -73,7 +73,7 @@ describe('ChatGPTAdapter', () => {
     it('should throw error when input fails', async () => {
       mockWebContents.executeJavaScript.mockResolvedValue({ success: false, error: 'textarea not found' });
 
-      await expect(adapter.inputPrompt('Test')).rejects.toThrow('ChatGPT inputPrompt failed');
+      await expect(adapter.inputPrompt('Test')).rejects.toThrow('ChatGPT enterPrompt failed');
     });
 
     it('should throw error when verification fails', async () => {

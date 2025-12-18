@@ -2,9 +2,10 @@
  * Base LLM Adapter
  *
  * 브라우저 자동화를 위한 기본 어댑터 클래스
+ * Issue #17: AdapterResult 타입으로 표준화
  */
 
-import type { LLMProvider } from '../../../shared/types';
+import type { LLMProvider, AdapterResult, AdapterErrorCode } from '../../../shared/types';
 
 interface WebContents {
   executeJavaScript: (script: string) => Promise<any>;
@@ -34,6 +35,19 @@ export class BaseLLMAdapter {
     // Default selectors - should be overridden by subclasses
     this.baseUrl = this.getBaseUrl(provider);
     this.selectors = this.getDefaultSelectors(provider);
+  }
+
+  // Helper to create success result
+  protected success<T>(data?: T): AdapterResult<T> {
+    return { success: true, data };
+  }
+
+  // Helper to create error result
+  protected error<T>(code: AdapterErrorCode, message: string, details?: Record<string, unknown>): AdapterResult<T> {
+    return {
+      success: false,
+      error: { code, message, details },
+    };
   }
 
   // Safe wrapper for executeJavaScript with error handling
@@ -86,12 +100,19 @@ export class BaseLLMAdapter {
     return selectorMap[provider];
   }
 
-  async isLoggedIn(): Promise<boolean> {
-    const script = `!!document.querySelector('${this.selectors.loginCheck}')`;
-    return this.executeScript<boolean>(script, false);
+  // --- AdapterResult-based methods (Issue #17) ---
+
+  async checkLogin(): Promise<AdapterResult<boolean>> {
+    try {
+      const script = `!!document.querySelector('${this.selectors.loginCheck}')`;
+      const isLoggedIn = await this.executeScript<boolean>(script, false);
+      return this.success(isLoggedIn);
+    } catch (error) {
+      return this.error('NOT_LOGGED_IN', `Login check failed: ${error}`);
+    }
   }
 
-  async waitForInputReady(timeout: number = 10000): Promise<void> {
+  async prepareInput(timeout: number = 10000): Promise<AdapterResult> {
     const isReady = await this.waitForCondition(
       async () => {
         return this.executeScript<boolean>(
@@ -103,16 +124,20 @@ export class BaseLLMAdapter {
     );
 
     if (!isReady) {
-      throw new Error(`Input not ready for ${this.provider}`);
+      return this.error('SELECTOR_NOT_FOUND', `Input not ready for ${this.provider}`, {
+        selector: this.selectors.inputTextarea,
+        timeout,
+      });
     }
+    return this.success();
   }
 
-  async inputPrompt(prompt: string): Promise<void> {
+  async enterPrompt(prompt: string): Promise<AdapterResult> {
     const escapedPrompt = JSON.stringify(prompt);
     const script = `
       (() => {
         const textarea = document.querySelector('${this.selectors.inputTextarea}');
-        if (!textarea) return false;
+        if (!textarea) return { success: false, error: 'selector not found' };
         if (textarea.tagName === 'TEXTAREA' || textarea.tagName === 'INPUT') {
           textarea.value = ${escapedPrompt};
           textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -120,34 +145,58 @@ export class BaseLLMAdapter {
           textarea.innerText = ${escapedPrompt};
           textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
         }
-        return true;
+        return { success: true };
       })()
     `;
-    const success = await this.executeScript<boolean>(script, false);
-    if (!success) {
-      throw new Error(`Failed to input prompt for ${this.provider}`);
+
+    try {
+      const result = await this.executeScript<{ success: boolean; error?: string }>(
+        script,
+        { success: false, error: 'script failed' }
+      );
+
+      if (!result.success) {
+        return this.error('INPUT_FAILED', `Failed to input prompt: ${result.error}`, {
+          promptLength: prompt.length,
+        });
+      }
+      return this.success();
+    } catch (error) {
+      return this.error('INPUT_FAILED', `Input prompt exception: ${error}`);
     }
   }
 
-  async sendMessage(): Promise<void> {
+  async submitMessage(): Promise<AdapterResult> {
     const script = `
       (() => {
         const button = document.querySelector('${this.selectors.sendButton}');
         if (button) {
           button.click();
-          return true;
+          return { success: true };
         }
-        return false;
+        return { success: false, error: 'send button not found' };
       })()
     `;
-    const success = await this.executeScript<boolean>(script, false);
-    if (!success) {
-      throw new Error(`Failed to send message for ${this.provider}: send button not found or click failed`);
+
+    try {
+      const result = await this.executeScript<{ success: boolean; error?: string }>(
+        script,
+        { success: false, error: 'script failed' }
+      );
+
+      if (!result.success) {
+        return this.error('SEND_FAILED', `Failed to send message: ${result.error}`, {
+          selector: this.selectors.sendButton,
+        });
+      }
+      return this.success();
+    } catch (error) {
+      return this.error('SEND_FAILED', `Send message exception: ${error}`);
     }
   }
 
-  async waitForResponse(timeout: number = 120000): Promise<void> {
-    console.log(`[${this.provider}] waitForResponse started, timeout: ${timeout}ms`);
+  async awaitResponse(timeout: number = 120000): Promise<AdapterResult> {
+    console.log(`[${this.provider}] awaitResponse started, timeout: ${timeout}ms`);
 
     // Step 1: Wait for typing to start (max 10 seconds)
     const typingStarted = await this.waitForCondition(
@@ -167,15 +216,19 @@ export class BaseLLMAdapter {
     );
 
     if (!typingFinished) {
-      throw new Error(`Response timeout for ${this.provider}`);
+      return this.error('RESPONSE_TIMEOUT', `Response timeout for ${this.provider}`, {
+        timeout,
+        remainingTimeout,
+      });
     }
 
     // Step 3: DOM stabilization delay
     await this.sleep(1000);
     console.log(`[${this.provider}] Response complete`);
+    return this.success();
   }
 
-  async extractResponse(): Promise<string> {
+  async getResponse(): Promise<AdapterResult<string>> {
     const script = `
       (() => {
         const messages = document.querySelectorAll('${this.selectors.responseContainer}');
@@ -183,7 +236,53 @@ export class BaseLLMAdapter {
         return lastMessage?.innerText || '';
       })()
     `;
-    return this.executeScript<string>(script, '');
+
+    try {
+      const content = await this.executeScript<string>(script, '');
+      return this.success(content);
+    } catch (error) {
+      return this.error('EXTRACT_FAILED', `Failed to extract response: ${error}`);
+    }
+  }
+
+  // --- Legacy methods (backward compatibility) ---
+
+  async isLoggedIn(): Promise<boolean> {
+    const result = await this.checkLogin();
+    return result.success && result.data === true;
+  }
+
+  async waitForInputReady(timeout: number = 10000): Promise<void> {
+    const result = await this.prepareInput(timeout);
+    if (!result.success) {
+      throw new Error(result.error?.message || `Input not ready for ${this.provider}`);
+    }
+  }
+
+  async inputPrompt(prompt: string): Promise<void> {
+    const result = await this.enterPrompt(prompt);
+    if (!result.success) {
+      throw new Error(result.error?.message || `Failed to input prompt for ${this.provider}`);
+    }
+  }
+
+  async sendMessage(): Promise<void> {
+    const result = await this.submitMessage();
+    if (!result.success) {
+      throw new Error(result.error?.message || `Failed to send message for ${this.provider}`);
+    }
+  }
+
+  async waitForResponse(timeout: number = 120000): Promise<void> {
+    const result = await this.awaitResponse(timeout);
+    if (!result.success) {
+      throw new Error(result.error?.message || `Response timeout for ${this.provider}`);
+    }
+  }
+
+  async extractResponse(): Promise<string> {
+    const result = await this.getResponse();
+    return result.data || '';
   }
 
   async isWriting(): Promise<boolean> {
