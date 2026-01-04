@@ -1,4 +1,5 @@
 import { Octokit } from 'octokit';
+import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
 import type { HostProject } from '../types/host.js';
 
 /**
@@ -27,17 +28,9 @@ interface PinnedReposResponse {
 }
 
 /**
- * REST API Repository 응답 타입 (Octokit의 일부)
+ * REST API Repository 응답 타입 (Octokit에서 가져옴)
  */
-interface RestRepoResponse {
-  name: string;
-  description: string | null;
-  full_name: string;
-  language: string | null;
-  stargazers_count: number;
-  topics?: string[];
-  homepage: string | null;
-}
+type RestRepoResponse = RestEndpointMethodTypes['repos']['listForUser']['response']['data'][number];
 
 /**
  * GitHub 레포지토리 분석 서비스
@@ -115,7 +108,7 @@ export class GitHubAnalyzer {
       lastSyncedAt: new Date().toISOString(),
       stars: repo.stargazerCount,
       topics: repo.repositoryTopics.nodes.map((t) => t.topic.name),
-      homepage: repo.homepageUrl,
+      homepage: repo.homepageUrl || undefined,
     }));
   }
 
@@ -151,7 +144,7 @@ export class GitHubAnalyzer {
       lastSyncedAt: new Date().toISOString(),
       stars: repo.stargazers_count,
       topics: repo.topics || [],
-      homepage: repo.homepage,
+      homepage: repo.homepage || undefined,
     };
   }
 
