@@ -1,7 +1,7 @@
 # YouTube Live Chat AI Chatbot
 
 [![Youtuber Chatbot CI](https://github.com/garimto81/claude/actions/workflows/youtuber-chatbot-ci.yml/badge.svg)](https://github.com/garimto81/claude/actions/workflows/youtuber-chatbot-ci.yml)
-[![Tests](https://img.shields.io/badge/tests-61%20passed-success)](https://github.com/garimto81/claude/actions)
+[![Tests](https://img.shields.io/badge/tests-78%20passed-success)](https://github.com/garimto81/claude/actions)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-green)](https://nodejs.org/)
 
@@ -70,7 +70,24 @@ copy .env.example .env
 ollama serve
 ```
 
-### 4. 개발 실행
+### 4. YouTube Chat 연동 (선택)
+
+YouTube Live 채팅에 연결하려면 `.env` 파일에 다음 중 하나를 설정:
+
+```env
+# 옵션 1: 비디오 ID로 연결
+YOUTUBE_VIDEO_ID=your_video_id
+
+# 옵션 2: Live URL로 연결
+YOUTUBE_LIVE_URL=https://www.youtube.com/watch?v=your_video_id
+```
+
+**주의**:
+- YouTube Chat 연동 없이도 서버는 정상 작동합니다
+- 연동을 활성화하려면 반드시 Ollama 서버가 실행 중이어야 합니다
+- masterchat은 API 키 없이 작동합니다
+
+### 5. 개발 실행
 
 ```powershell
 # 개발 모드 (핫 리로드)
@@ -80,6 +97,10 @@ npm run dev
 npm run build
 npm run start
 ```
+
+서버 시작 시 로그 확인:
+- `[App] YouTube Chat integration enabled` - 연동 활성화
+- `[App] YouTube Chat integration disabled` - 연동 비활성화
 
 ---
 
@@ -96,6 +117,11 @@ OLLAMA_MODEL=qwen3:8b
 
 # 메인 서버 연결 (선택)
 MAIN_SERVER_URL=http://localhost:3001
+
+# YouTube Chat 연동 (선택 - 둘 중 하나 설정)
+YOUTUBE_VIDEO_ID=dQw4w9WgXcQ           # YouTube 비디오 ID
+# 또는
+YOUTUBE_LIVE_URL=https://www.youtube.com/watch?v=dQw4w9WgXcQ  # Live URL
 
 # 챗봇 설정
 BOT_NAME=CodingBot
